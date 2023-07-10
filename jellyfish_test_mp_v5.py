@@ -4,6 +4,7 @@ from fuzzywuzzy import fuzz
 from multiprocessing import Pool
 import timeit
 from datetime import datetime
+from tqdm import tqdm
 
 date_time = datetime.now()
 
@@ -17,7 +18,7 @@ print(df_itemmaster)
 df = df[(df["total_item_cost"] != 0.0) & (df["total_item_qty_on_hand"] != 0)]
 df = pd.concat([df, df_itemmaster])
 print(df)
-df = df.sample(10000)
+# df = df.sample(10000)
 df = df.reset_index(drop=True)
 print(df)
 print(df.columns)
@@ -44,7 +45,7 @@ def compare_strings(i):
         item_description_2 = df.loc[j, 'item_description']
         vendor_id_2 = df.loc[j, 'vendor_item_no']
         dw_evi_bu_2 = df.loc[j, 'dw_evi_bu']
-        if((not dw_evi_bu_1 == "ITEMMASTER") and (not dw_evi_bu_2 == "ITEMMASTER")):
+        if((dw_evi_bu_1 != "ITEMMASTER") or (dw_evi_bu_2 != "ITEMMASTER")):
             description_similarity = jellyfish.jaro_winkler(item_description_1, item_description_2)
             vendor_id_similarity = jellyfish.jaro_winkler(vendor_id_1, vendor_id_2)
             
@@ -58,14 +59,18 @@ def main():
     num_processes = 16
 
     # Perform string similarity comparisons in parallel
+    # Perform string similarity comparisons in parallel with tqdm progress bar
     with Pool(num_processes) as p:
-        similar_records = p.map(compare_strings, range(len(df)))
+        results = []
+        for result in tqdm(p.imap_unordered(compare_strings, range(len(df))), total=len(df)):
+            if result:
+                results.extend(result)
 
     # Flatten the list of similar records
-    similar_records = [record for sublist in similar_records for record in sublist]
+    # similar_records = [record for sublist in similar_records for record in sublist]
 
     # Create a DataFrame from the matches
-    matches_df = pd.DataFrame(similar_records, columns=["item_no_1", "item_description_1", "vendor_item_no_1", "dw_evi_bu_1", "item_no_2", "item_description_2", "vendor_item_no_2", "dw_evi_bu_2","description_similarity", "vendor_similarity"])
+    matches_df = pd.DataFrame(results, columns=["item_no_1", "item_description_1", "vendor_item_no_1", "dw_evi_bu_1", "item_no_2", "item_description_2", "vendor_item_no_2", "dw_evi_bu_2","description_similarity", "vendor_similarity"])
     print(matches_df)
     export_matches(matches_df)
 
